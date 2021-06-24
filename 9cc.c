@@ -21,6 +21,24 @@ struct Token {
   char *str;      // トークン文字列
 };
 
+// 入力プログラム
+char *user_input;
+
+// エラー箇所を報告する
+void error_at(char *loc, char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+
+  int pos = loc - user_input; // エラー地点と入力の先頭のポインタの差を取る
+  fprintf(stderr, "%s\n", user_input);
+  fprintf(stderr, "%*s", pos, " "); // pos個の空白を出力
+  fprintf(stderr, "^ ");
+  vfprintf(stderr, fmt, ap);
+  fprintf(stderr, "\n");
+
+  exit(1);
+}
+
 // 現在着目しているトークン
 Token *token;
 
@@ -48,7 +66,7 @@ bool consume(char op) {
 // それ以外のときにはエラーを報告する
 void expect(char op) {
   if (token->kind != TK_RESERVED || token->str[0] != op) {
-    error("'%c'ではありません", op);
+    error_at(token->str, "expected '%c'", op);
   }
   token = token->next;
 }
@@ -57,16 +75,14 @@ void expect(char op) {
 // それ以外のときにはエラーを報告する
 int expect_number() {
   if (token->kind != TK_NUM) {
-    error("数ではありません");
+    error_at(token->str, "expected a number");
   }
   int val = token->val;
   token = token->next;
   return val;
 }
 
-bool at_eof() {
-  return token->kind == TK_EOF;
-}
+bool at_eof() { return token->kind == TK_EOF; }
 
 // 新しいトークンを作成してcurにつなげる
 Token *new_token(TokenKind kind, Token *cur, char *str) {
@@ -77,8 +93,9 @@ Token *new_token(TokenKind kind, Token *cur, char *str) {
   return tok;
 }
 
-// 入力文字列pをトークナイズして返す
-Token *tokenize(char *p) {
+// user_inputをトークナイズして返す
+Token *tokenize() {
+  char *p = user_input;
   Token head;
   head.next = NULL;
   Token *cur = &head;
@@ -101,7 +118,7 @@ Token *tokenize(char *p) {
       continue;
     }
 
-    error("トークナイズできません");
+    error_at(p, "expected a number");
   }
 
   new_token(TK_EOF, cur, p);
@@ -115,16 +132,17 @@ int main(int argc, char **argv) {
   }
 
   // トークナイズする
-  token = tokenize(argv[1]);
+  user_input = argv[1];
+  token = tokenize();
 
   printf(".intel_syntax noprefix\n");
   printf(".globl main\n");
   printf("main:\n");
 
   // 式の最初は数でなければならないのでチェックしてから最初のmov命令を出力
-  printf ("  mov rax, %d\n", expect_number());
+  printf("  mov rax, %d\n", expect_number());
 
-  while(!at_eof()) {
+  while (!at_eof()) {
     if (consume('+')) {
       printf("  add rax, %d\n", expect_number());
       continue;
